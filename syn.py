@@ -28,7 +28,7 @@ class SyntacticAnalyzer:
         self.GOTO = {y.name: {x: ' ' for x in self.NonTerminalSymbols} for y in self.itemSets}  # GOTO表
 
         self.prods = cfg.prods  # 产生式
-        self.prodStrs = [i.toString() for i in self.prods]
+        self.prodStrs = [i.toStr() for i in self.prods]
 
         self.MTitle = self.TerminalSymbols + self.NonTerminalSymbols
         self.M = {y.name: {x: ' ' for x in self.MTitle} for y in self.itemSets}  # 总表
@@ -41,8 +41,8 @@ class SyntacticAnalyzer:
 
     # 给出一个产生式，返回这个产生式是原文法的第几个产生式
     def item2prodIdx(self, item):
-        tempStr = item.left + '->@'  # 代替点
-        for right in item.right:
+        tempStr = item.lhs + '->@'  # 代替点
+        for right in item.rhs:
             tempStr += (right['type'] + ' ')
         tempStr += '# '
         return self.prodStrs.index(tempStr)
@@ -63,8 +63,8 @@ class SyntacticAnalyzer:
 
         for I in self.itemSets:
             for item in I.items:
-                if item.dotPos == len(item.right):  # dot在最后,要规约了
-                    if item.left == self.OriginStartSymbol and item.terms[0] == '#':
+                if item.dot_position == len(item.rhs):  # dot在最后,要规约了
+                    if item.lhs == self.OriginStartSymbol and item.terms[0] == '#':
                         if self.M[I.name][item.terms[0]] != ' ':
                             print('LR(1)分析表有多重入口！')
                         self.M[I.name][item.terms[0]] = 'acc'
@@ -74,8 +74,8 @@ class SyntacticAnalyzer:
                         self.M[I.name][item.terms[0]] = 'reduce ' + str(self.item2prodIdx(item))
                     continue
 
-                if len(item.right) == 1 and item.right[0]['type'] == '$':
-                    if item.left == self.OriginStartSymbol and item.terms[0] == '#':
+                if len(item.rhs) == 1 and item.rhs[0]['type'] == '$':
+                    if item.lhs == self.OriginStartSymbol and item.terms[0] == '#':
                         if self.M[I.name][item.terms[0]] != ' ':
                             print('LR(1)分析表有多重入口！')
                         self.M[I.name][item.terms[0]] = 'acc'
@@ -134,20 +134,20 @@ class SyntacticAnalyzer:
                 if not self.semantic.semanticRst:
                     return False
 
-                rightLen = len(prod.right)
+                rightLen = len(prod.rhs)
                 stateLen = len(stateStack)
 
-                if rightLen == 1 and prod.right[0]['type'] == '$':
+                if rightLen == 1 and prod.rhs[0]['type'] == '$':
                     # 是空串, 有问题, stateStack和shiftStr在这个分支中就处理好
-                    dst = self.M[stateStack[-1]][prod.left].split(' ')[1]  # 因为是空串，没有pop，还是-1
+                    dst = self.M[stateStack[-1]][prod.lhs].split(' ')[1]  # 因为是空串，没有pop，还是-1
                     stateStack.append(dst)
-                    shiftStr.append({'class': 'NT', 'type': prod.left})
+                    shiftStr.append({'class': 'NT', 'type': prod.lhs})
                     X = inputStr[0]
 
                 else:  # 不是空串
                     stateStack = stateStack[0: stateLen - rightLen]  # 出栈
                     shiftStr = shiftStr[0: stateLen - rightLen]     # 出栈
-                    X = {'class': 'NT', 'type': prod.left}  # 产生式的左边
+                    X = {'class': 'NT', 'type': prod.lhs}  # 产生式的左边
 
             elif act == 'acc':  # 接受操作
                 self.semantic.semanticAnalyze(self.prods[1], shiftStr)

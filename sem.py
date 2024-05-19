@@ -79,12 +79,12 @@ class SemanticAnalyser:
     # 根据语义规则进行规约
     # prod: 规约时运用的产生式, shiftStr: 移进规约串
     def semanticAnalyze(self, prod, shiftStr):
-        nt = prod.left
-        r = prod.right
+        nt = prod.lhs
+        r = prod.rhs
 
         # 主要分为说明、赋值、数组、布尔表达式、条件控制
 
-        # print("产生式规约: ", prod.toString())
+        # print("产生式规约: ", prod.toStr())
         # print("移进规约串: ", shiftStr)
         sys.stdout.flush()
 
