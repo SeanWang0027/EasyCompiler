@@ -17,21 +17,21 @@ class SyntacticAnalyzer:
         self.Terminals = cfg.Terminals
         self.NonTerminals = cfg.NonTerminals
 
-        self.itemSets = family.itemSets  # 状态集合
+        self.sets = family.sets  # 状态集合
         self.edges = family.edges
-        self.numSet = len(self.itemSets)
+        self.numSet = len(self.sets)
 
         ACTIONTitle = self.Terminals  # ACTION表面临的输入符号
         ACTIONTitle.append(self.End)
 
-        self.ACTION = {y.name: {x: ' ' for x in ACTIONTitle} for y in self.itemSets}  # ACTION表
-        self.GOTO = {y.name: {x: ' ' for x in self.NonTerminals} for y in self.itemSets}  # GOTO表
+        self.ACTION = {y.name: {x: ' ' for x in ACTIONTitle} for y in self.sets}  # ACTION表
+        self.GOTO = {y.name: {x: ' ' for x in self.NonTerminals} for y in self.sets}  # GOTO表
 
         self.procedures = cfg.procedures  # 产生式
         self.procedurestrs = [i.toStr() for i in self.procedures]
 
         self.MTitle = self.Terminals + self.NonTerminals
-        self.M = {y.name: {x: ' ' for x in self.MTitle} for y in self.itemSets}  # 总表
+        self.M = {y.name: {x: ' ' for x in self.MTitle} for y in self.sets}  # 总表
 
         self.syntacticRst = True
         self.syntacticErrMsg = "语法分析成功！"
@@ -61,7 +61,7 @@ class SyntacticAnalyzer:
             if e['symbol'] in self.NonTerminals:  # symbol是非终结符，构建GOTO表
                 self.M[e['start']][e['symbol']] = 'goto ' + e['end']
 
-        for I in self.itemSets:
+        for I in self.sets:
             for item in I.items:
                 if item.dot_position == len(item.rhs):  # dot在最后,要规约了
                     if item.lhs == self.OriginStart and item.terms[0] == '#':

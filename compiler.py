@@ -33,7 +33,7 @@ def compiler(input_file):
     cfg.Grammer('./productions/productions.txt')
     cfg.getDot()
     cfg.CalculateFirst()
-    family  = ItemSetSpecificationFamily(cfg)
+    family  = ItemFamily(cfg)
     family.buildFamily()
     ana = SyntacticAnalyzer(lex,cfg,family)
     ana.getTables()

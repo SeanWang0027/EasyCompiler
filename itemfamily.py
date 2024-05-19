@@ -2,67 +2,48 @@ import re
 from item import *
 from itemset import * 
 
-# 最终项目族的DFA
-class ItemSetSpecificationFamily:
+class ItemFamily:
     def __init__(self, cfg):
         self.Terminals = cfg.Terminals  # 终结符表
         self.NonTerminals = cfg.NonTerminals  # 非终结符表
         self.Start = cfg.Start  # 是program_
         self.End = cfg.End  # 是#
         self.Epsilon = cfg.Epsilon
-
         self.symbols = self.Terminals + self.NonTerminals
-        self.itemPool = cfg.items  # itemPool：由产生式加点后的项目池
-        self.itemSets = []  # 从pool中用GO函数划分  DFA不同的状态
+        self.items = cfg.items  # itemPool：由产生式加点后的项目池
+        self.sets = []  # 从pool中用GO函数划分  DFA不同的状态
         self.edges = []  # 项目集之间的转移  {'start': I.name, 'symbol': X, 'end': tempItemSet.name}
         self.firstSet = cfg.firstSet
         return
 
-    # 获取左边为NT，dot=0的产生式，用于计算闭包
-    def getLeftNT(self, NT):
-        rst = []
-        for item in self.itemPool:
-            if item.lhs == NT and item.dot_position == 0:
-                rst.append(item)
-        return rst
-
-    # 获取字符串的first
-    def getFirstSet(self, symbols):
-        rst = []
-        hasEpsAllBefore = 0
-
-        for s in symbols:  # 遍历字符串中的每一个NT和T
-            tempSet = [i for i in self.firstSet[s]]  # 该元素的first集
-            if self.Epsilon in tempSet:  # 该元素的first集中有eps
-                if hasEpsAllBefore == 0:
-                    hasEpsAllBefore = 1
-                rst.extend([i for i in tempSet if i != self.Epsilon])  # 在列表后追加多个值
-            else:
-                hasEpsAllBefore = -1
-                rst.extend(tempSet)
-                break  # 该元素的first集中有无eps，可以终止遍历了
-
-        if hasEpsAllBefore == 1:  # 字符串中的所有元素的first集全有eps
-            rst.append(self.Epsilon)
-        return rst
-
     # 求包含item的闭包里的其他项目
-    def extendItem(self, item):
-        rst = []
-        if item.rhs[item.dot_position]['class'] != 'NT':  # dot后面那个字符不是非终结符
-            return rst
-
-        str2BgetFirstSet = []  # dot指向元素的下一个元素开始的字符串
-        for rightIdx in range(item.dot_position + 1, len(item.rhs)):  # 遍历dot指向元素的下一个元素 至 末尾
-            str2BgetFirstSet.append(item.rhs[rightIdx]['type'])
-        nextItem = self.getLeftNT(item.rhs[item.dot_position]['type'])  # 获取左边为NT，dot=0的产生式，用于计算闭包
-        str2BgetFirstSet.append(item.terms[0])  # 展望的字符也加上
-        tempFirsts = self.getFirstSet(str2BgetFirstSet)  # 求dot指向元素的下一个元素开始的字符串的first集
+    def elseItem(self, item):
+        res = []
+        if item.rhs[item.dot_position]['class'] != 'NT':
+            return res
+        rawFirst = []
+        for rightIdx in range(item.dot_position + 1, len(item.rhs)):
+            rawFirst.append(item.rhs[rightIdx]['type'])
+        nextItem = [term for term in  self.items if term.lhs==item.rhs[item.dot_position]['type'] and term.dot_position == 0] 
+        rawFirst.append(item.terms[0])
+        tmpFirst = list() 
+        hasEps = 0
+        for s in rawFirst: 
+            tempSet = [i for i in self.firstSet[s]] 
+            if self.Epsilon in tempSet:
+                if hasEps == 0:
+                    hasEps = 1
+                tmpFirst.extend([i for i in tempSet if i != self.Epsilon])
+            else:
+                hasEps = -1
+                tmpFirst.extend(tempSet)
+                break
+        if hasEps == 1:
+            tmpFirst.append(self.Epsilon)
         for i in nextItem:
-            for j in tempFirsts:
-                rst.append(Item(i.lhs, i.rhs, 0, [j]))  # 往item的闭包里的添加其他项目
-
-        return rst
+            for j in tmpFirst:
+                res.append(Item(i.lhs, i.rhs, 0, [j]))
+        return res
 
     # 计算闭包
     def getLR1Closure(self, I):
@@ -81,7 +62,7 @@ class ItemSetSpecificationFamily:
                         continue
                     if right[item.dot_position]['class'] == 'T':
                         continue
-                    tempRst = self.extendItem(item)  # 求包含item的闭包里的其他项目
+                    tempRst = self.elseItem(item)  # 求包含item的闭包里的其他项目
                     for i in tempRst:  # i可能会重复定义
                         tempStr = i.toStr()
                         if tempStr not in rstStr:
@@ -117,10 +98,10 @@ class ItemSetSpecificationFamily:
     # 构造项目集规范族
     # 从起始状态的闭包出发，不断调用GO函数生成新的项目族并计算闭包
     def buildFamily(self):
-        iS = self.itemSets  # DFA不同的状态
+        iS = self.sets  # DFA不同的状态
         startI = []
-        startI.append(self.itemPool[0])  # 添加起始项目
-        iS.append(ItemSet('s0', self.getLR1Closure([startI[0]] + self.extendItem(startI[0]))))  # 起始项目集
+        startI.append(self.items[0])  # 添加起始项目
+        iS.append(ItemSet('s0', self.getLR1Closure([startI[0]] + self.elseItem(startI[0]))))  # 起始项目集
 
         setCnt = 1
         setStrings = {}

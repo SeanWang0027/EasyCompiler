@@ -23,6 +23,7 @@ class CFG:
         self.Epsilon = None
         return
 
+
     def readfile(self,f):
         self.cntProd = 0
         tokens = list()
@@ -74,6 +75,7 @@ class CFG:
                         tokenB.append(tmp)
                     tokenC.append(tokenB)
 
+
         for t in tokens: 
             if t['left'][0]['type'] not in self.NonTerminals:
                 self.NonTerminals.append(t['left'][0]['type'])
@@ -84,6 +86,7 @@ class CFG:
                     if t['right'][rightIdx][rightIdx2]['class'] == 'T' and t['right'][rightIdx][rightIdx2]['type'] not in self.Terminals:
                         self.Terminals.append(t['right'][rightIdx][rightIdx2]['type'])
         return 
+
 
     def Grammer(self, path):
         self.Start = 'program_'
@@ -98,6 +101,17 @@ class CFG:
         self.Epsilon = '$'
         return
 
+
+    def getDot(self):
+        for prod in self.procedures:
+            if len(prod.rhs) == 1 and prod.rhs[0]['type'] == self.Epsilon:
+                self.items.append(Item(prod.lhs, prod.rhs, 0, ['#']))
+                continue
+            for i in range(len(prod.rhs) + 1):
+                self.items.append(Item(prod.lhs, prod.rhs, i, ['#']))
+        return
+
+
     def CalculateFirst(self):
         for symbol in self.Terminals:
             self.firstSet[symbol] = [symbol]
@@ -106,6 +120,7 @@ class CFG:
         for symbol in self.NonTerminals:
             self.calNT(symbol)
         return
+
 
     def calNT(self, symbol):
         haseps = -1
@@ -140,13 +155,4 @@ class CFG:
                     if self.Epsilon not in self.firstSet[symbol]:
                         mark = 1
                         self.firstSet[symbol].append(self.Epsilon)
-        return
-
-    def getDot(self):
-        for prod in self.procedures:
-            if len(prod.rhs) == 1 and prod.rhs[0]['type'] == self.Epsilon:
-                self.items.append(Item(prod.lhs, prod.rhs, 0, ['#']))
-                continue
-            for i in range(len(prod.rhs) + 1):
-                self.items.append(Item(prod.lhs, prod.rhs, i, ['#']))
         return
