@@ -1,723 +1,600 @@
 import copy
-import sys
-
-
-# 语句块
-# 语法树结点类
-class Node:
-    def __init__(self):
-        self.place = None  # 语句块入口的中间变量
-        self.code = []  # 传递而来的或者生成的中间代码
-        self.stack = []  # 翻译闭包表达式所用的临时栈
-
-        self.name = None  # 语句块的标识符
-        self.arrname = None  # 数组的名字
-        self.type = None  # 结点的数据类型
-        self.data = None  # 结点携带的数据
-        self.dims = []  # 数组结点的维度
-        self.position = []  # 符号元素在数组的位置
-
-        self.begin = None  # 循环入口
-        self.end = None  # 循环出口
-        self.true = None  # 条件为真时的跳转位置
-        self.false = None  # 条件为假时的跳转位置
-
-    def prtNode(self):
-        print('Node name:', self.name, ',type:', self.type, ',data:', self.data, ',code:', self.code)
-        return
-
-
-# 符号表
-class Symbol:
-    def __init__(self):
-        self.name = None  # 符号的标识符
-        self.type = None  # 类型
-
-        self.size = None  # 占用字节数
-        self.offset = None  # 内存偏移量
-
-        self.place = None  # 对应的中间变量
-        self.function = None  # 所在函数
-
-        self.dims = []  # 数组的维度
-
-
-# 函数表
-class FunctionSymbol:
-    def __init__(self):
-        self.name = None  # 函数的标识符
-        self.type = None  # 返回值类型
-        self.label = None  # 入口处的标签
-        self.params = []  # 形参列表
-
+from TreeNode import TreeNode
+from sym import Symbol
+from func import Func
 
 # 语义分析类
-class SemanticAnalyser:
+class SemAnalyzer:
     def __init__(self):
-        self.sStack = []  # 语义分析栈
-        self.symbolTable = []  # 符号表    [s { name, function } ]
-        self.funcTable = []  # 函数表
-
-        self.curTempId = 0  # 中间变量名序号
+        self.sStack = list()  # 语义分析栈
+        self.symbolTable = list()  # 符号表    [s { name, function } ]
+        self.funcTable = list()  # 函数表
+        self.midValid = 0  # 中间变量名序号
         self.curLabelId = 0  # 当前 label 入口序号
         self.curFuncId = 0  # 当前 function 序号
         self.curOffset = 0  # 当前偏移量
-        self.curFuncSymbol = None  # 当前函数
-
         # 把全局当作一个函数
-        f = FunctionSymbol()
+        f = Func()
         f.name = 'global'  # 函数标识符
         f.label = 'global'  # 函数入口处标签
         self.updateFuncTable(f)  # 把全局函数加入函数表
-        self.curFuncSymbol = f  # 当前函数为global
-        self.middleCode = []  # 生成的中间代码
-
-        self.semanticRst = True
-        self.semanticErrMsg = "语义分析成功！"
+        self.curFunction = f  # 当前函数为global
+        self.mid_Code = list()  # 生成的中间代码
+        self.marksem = True
+        self.semlog = "Semantic Analyze Success!"
         return
 
+    def handelarrayDeclaration(self,nt,r,shiftStr):
+        if len(r) == 3:
+            n = TreeNode()
+            n.name = nt
+            n.type = 'int array' 
+            n.dimensions = [int(shiftStr[-2]['data'])] 
+            self.sStack.append(n)
+            # self.prtTreeNodeCode(n)
+        elif len(r) == 4:
+            n = self.popStack()  
+            n.name = nt
+            n.type = 'int array'
+            n.dimensions.insert(0, int(shiftStr[-3]['data']))
+            self.sStack.append(n)
+    
+    def handleArray(self,shiftStr):
+        new_exp = self.popStack() 
+        self.calExpression(new_exp)  
+        array_n = copy.deepcopy(self.sStack[-1])  
+        if shiftStr[-4]['type'] == 'array':  
+            self.popStack()
+            new_exp.name  = new_exp.type = 'array'
+            new_exp.arrayname = array_n.arrayname  
+            new_exp.pos = copy.deepcopy(array_n.pos)
+            if new_exp.midval:
+                new_exp.pos.append(new_exp.midval)
+            else:
+                new_exp.pos.append(new_exp.statistics)
+            new_exp.midval = array_n.midval  
+            self.sStack.append(new_exp)
+        else:  
+            new_exp.name = 'array'
+            new_exp.arrayname = shiftStr[-4]['data']
+            nTmp = self.findSymbol(shiftStr[-4]['data'], self.curFunction.label)  
+            if nTmp == None:
+                self.marksem = False
+                self.semlog = "Not Defined Array:" + shiftStr[-4]['data']
+                print('Using Array that are not defined!')
+                return
+            if new_exp.midval:
+                new_exp.pos.append(new_exp.midval)
+            else:
+                new_exp.pos.append(new_exp.statistics)
+            new_exp.midval = shiftStr[-4]['data']
+            new_exp.type = 'array'
+            self.sStack.append(new_exp)
+    
+    def popStack(self):
+        return self.sStack.pop(-1)
+    
+    def handleProgram(self,nt):
+        n = self.popStack()
+        n.name = nt
+        for treenode in n.tmpstack:
+            for code in treenode.midcode:
+                n.midcode.append(code)
+        self.sStack.append(n)
+        self.mid_Code = copy.deepcopy(n.midcode)
+        
+    def handleDeclarationChain(self,r,nt):
+        newTreeNode = TreeNode()
+        if len(r) != 2:
+            pass 
+        else: 
+            newTreeNode = self.popStack()
+            newTreeNode.tmpstack.insert(0, self.popStack())
+        newTreeNode.name = nt
+        self.sStack.append(newTreeNode)
+    
+    def defineSam(self,name,midval,type,function,size,offset,sam):
+        sam.name = name
+        sam.midval = midval
+        sam.type = type
+        sam.function = function
+        sam.size = size
+        sam.offset = offset
+    
+    def handleDeclaration(self,r,nt,shiftStr):
+        if len(r) == 3:  # -> typeSpecifier id ;
+            node = self.popStack()  # typeSpecifier
+            node.name = nt
+            curType = node.type
+            curName = shiftStr[-2]['data'] 
+            sam = self.findSymbol(curName, self.curFunction.label)
+            if sam is None:
+                sam = Symbol()
+            else :
+                print("The val has been declared!")
+                self.marksem = False
+                self.semlog = "Declared Variable!"  
+                return
+            if node.midval == None:
+                self.defineSam(curName,self.getNewTmp(),curType,self.curFunction.label,4,self.curOffset,sam)
+                self.curOffset += sam.size
+                self.updateSymbolTable(sam)
+                if node.statistics is not None: 
+                    code = (':=', node.statistics, '_', sam.midval)
+                    node.midcode.append(code)
+            else:
+                self.defineSam(curName,node.midval,curType,self.curFuncId.label,4,self.curOffset,sam)
+                self.curOffset += sam.size
+                self.updateSymbolTable(sam)
+                for code in node.midcode:
+                    node.midcode.tmpstack.insert(0, code)
+
+        if len(r) == 4:
+            array_n = self.popStack()
+            node = self.popStack()
+            node.name = nt
+            curType = array_n.type
+            curName = shiftStr[-3]['data']
+            sam = self.findSymbol(curName, self.curFunction.label)
+            if sam is not None:
+                print("The Array has been Declared!")
+                self.marksem = False
+                self.semlog = "Decalred Array."  
+                return
+            else:
+                sam = Symbol()
+            if node.midval is None:
+                self.defineSam(curName,self.getNewTmp(),curType,self.curFunction.label,4,self.curOffset,sam)
+                for ndim in array_n.dimensions:
+                    sam.size *= ndim
+                sam.dimensions = copy.deepcopy(array_n.dimensions)
+                self.curOffset += sam.size
+                self.updateSymbolTable(sam)
+                if node.statistics is not None:
+                    code = (':=', node.statistics, '_', sam.midval)
+                    node.midcode.append(code)
+            else:
+                self.defineSam(curName,node.midval,curType,self.curFuncId,4,self.curOffset,sam)
+                for ndim in array_n.dimensions:
+                    sam.size *= ndim
+                sam.dimensions = copy.deepcopy(array_n.dimensions)
+                self.curOffset += sam.size
+                self.updateSymbolTable(sam)
+                for code in node.midcode:
+                    node.midcode.tmpstack.insert(0, code)
+        if len(r) == 1:  # -> completeFunction
+            node = self.popStack()
+            node.name = nt
+        self.sStack.append(node)
+
+    def handleCompleteFunction(self,nt):
+        node = self.popStack()  # block
+        declareFunction = self.popStack()  # declareFunction
+        node.name = nt
+        tmp = list()
+        tmp.append((declareFunction.statistics, ':', '_', '_'))
+        for treenode in declareFunction.tmpstack:  # para
+            tmp.append(('pop', '_', 4 * declareFunction.tmpstack.index(treenode), treenode.midval))
+        if len(declareFunction.tmpstack) > 0:
+            tmp.append(('-', 'fp', 4 * len(declareFunction.tmpstack), 'fp'))
+        for code in reversed(tmp):
+            node.midcode.insert(0, code)
+        code_end = node.midcode[-1]
+        if code_end[0][0] == 'l':
+            label = code_end[0]
+            node.midcode.remove(code_end)
+            for code in node.midcode:
+                if code[3] == label:
+                    node.midcode.remove(code)
+        self.sStack.append(node)
+    
+    def handleFormalParalist(self,r,nt):
+        node = TreeNode()
+        if len(r) == 3:  # formalParaList -> para , formalParaList
+            node = self.popStack()
+            node.name = nt
+            node.tmpstack.insert(0, self.popStack())
+        elif len(r) == 1 and (r[0]['type'] in ['$', 'void']):  # $ | void
+            node.name = nt
+        elif len(r) == 1 and r[0]['type'] == 'para':  # para
+            node.tmpstack.insert(0, self.popStack())
+            node.name = nt
+        self.sStack.append(node)
+
+    
+    def handleDeclareFunction(self,nt,shiftStr):
+        node = self.popStack()  # formalParaList
+        node.name = nt
+        nFuncReturnType = self.popStack()  # typeSpecifier
+        f = Func()
+        f.name = shiftStr[-4]['data']  # id
+        f.type = nFuncReturnType.type
+        if f.name == 'main':
+            f.label = 'main'
+        else:
+            self.curFuncId += 1  
+            f.label = 'f' + str(self.curFuncId)
+        for arg in node.tmpstack:
+            sam = Symbol()
+            self.defineSam(arg.statistics,arg.midval,arg.type,f.label,4,self.curOffset,sam)
+            self.curOffset += sam.size
+            self.updateSymbolTable(sam)
+            f.params.append((arg.statistics, arg.type, arg.midval))
+        node.statistics = f.label
+        self.updateFuncTable(f)
+        self.tmpstack = list()  # 清空
+        self.curFunction = f
+        self.sStack.append(node)
+
+    def handleStatBlock(self,nt):
+        node = self.popStack()
+        node.name = nt
+        self.sStack.append(node)
+    
+    def handleTypeSpecifier(self,nt,shiftStr):
+        newTreeNode = TreeNode()
+        newTreeNode.name = nt
+        newTreeNode.type = shiftStr[-1]['type']
+        self.sStack.append(newTreeNode)
+    
+    def handlePara(self,nt,shiftStr):
+        node = self.popStack()  # typeSpecifier treenode
+        node.name = nt
+        node.midval = self.getNewTmp()
+        node.statistics = shiftStr[-1]['data']
+        self.sStack.append(node)
+    
+    def handleStatementChain(self,r,nt):
+        if len(r) == 1:  
+            newTreeNode = TreeNode()
+            newTreeNode.name = nt
+            self.sStack.append(newTreeNode)
+        elif len(r) == 2: 
+            newTreeNode = self.popStack()
+            newTreeNode.tmpstack.insert(0, self.popStack())
+            newTreeNode.name = nt
+            for code in reversed(newTreeNode.tmpstack[0].midcode):
+                newTreeNode.midcode.insert(0, code)
+            self.sStack.append(newTreeNode)
+    
+    def handleAssignStatement(self,nt,shiftStr):
+        test = shiftStr[-4]['type']
+        if test != 'array':  # id = expression ;
+            id = shiftStr[-4]['data']
+            node = copy.deepcopy(self.popStack())  # expression
+            node.name = nt
+            self.calExpression(node)
+            sam = self.findSymbol(id, self.curFunction.label)
+            if sam is None:
+                print("Use Val that is not defined!")
+                self.marksem = False
+                self.semlog = "Use Variable that is not defined."
+                return
+            if sam.type != node.type:
+                token = shiftStr[-4]
+                self.marksem = False
+                self.semlog = "Wrong type of variable when assigning " + token['data']  
+                return
+            code = None
+            if node.midval is not None:
+                code = (':=', node.midval, '_', sam.midval)
+            else:
+                code = (':=', node.statistics, '_', sam.midval)
+            node.midcode.append(code)
+            self.sStack.append(node)
+        else:  # -> array = expression ;
+            node = copy.deepcopy(self.popStack())  # expression
+            node.name = nt
+            array_n = self.popStack()
+            array_name = array_n.arrayname 
+            self.calExpression(node) 
+            sam = self.findSymbol(array_name, self.curFunction.label)
+            if sam is None:
+                print("Use Array Val that is not defined!")
+                self.marksem = False
+                self.semlog = "Wrong type of Array when assigning " + array_name
+                return
+            t_offset = self.getNewTmp() 
+            if len(array_n.pos) == 1:
+                node.midcode.append((':=', str(array_n.pos[0]), '-', t_offset))
+            elif len(array_n.pos) == 2:
+                node.midcode.append(('*', str(array_n.pos[0]), str(sam.dimensions[1]), t_offset))
+                node.midcode.append(('+', t_offset, str(array_n.pos[1]), t_offset))
+            if node.midval is not None:
+                code = ('[]=', node.midval, '_', sam.midval + '[' + t_offset + ']')
+            else:
+                t = self.getNewTmp()
+                code = (':=', node.statistics, '_', t)
+                node.midcode.append(code)
+                code = ('[]=', t, '_', sam.midval + '[' + t_offset + ']')
+            node.midcode.append(code)
+            self.sStack.append(node)
+    
+    def handleReturnStatement(self,r,nt):
+        node = None
+        if len(r) == 3:  # return expression
+            node = self.popStack()  # expression    
+            self.calExpression(node)
+            node.type = r[0]['type']  # == return
+
+            n_Rst = None
+            if node.midval != None:
+                n_Rst = node.midval
+            else:
+                n_Rst = node.statistics
+            node.midcode.append((':=', n_Rst, '_', 'v0'))
+        elif len(r) == 2:  # return
+            node = TreeNode()
+            node.type = r[0]['type']
+        node.midcode.append((node.type, '_', '_', '_'))  # return
+        node.name = nt
+        self.sStack.append(node)
+    
+    def handleExpression(self,r,nt):
+        node = None
+        if len(r) == 1:  # expression -> primaryExpression
+            node = copy.deepcopy(self.sStack[-1])  # primaryExpression
+            node.tmpstack.insert(0, self.popStack())  # primaryExpression
+        elif len(r) == 3:  # expression -> primaryExpression operator expression
+            node = copy.deepcopy(self.popStack())  # expression
+            for i in range(2):
+                node.tmpstack.insert(0, self.popStack())  # operator
+        node.name = nt
+        self.sStack.append(node)
+    
+    def handlePrimaryExpression(self,r,nt,shiftStr):
+        newTreeNode = TreeNode()
+        if len(r) == 1 and r[0]['type'] == 'INT':  # num
+            newTreeNode.type = shiftStr[-1]['type'].lower()  # int
+            newTreeNode.statistics = shiftStr[-1]['data']  
+        # id ( actualParaList )
+        elif len(r) == 4 and r[0]['type'] == 'IDENTIFIER':  # 找定义过的
+            function = None
+            for f in self.funcTable:
+                if f.name == shiftStr[-4]['data']:
+                    function =  f
+            newTreeNode = self.popStack()  # actualParaList
+            newTreeNode.name = nt
+            if function is None:
+                print('Not Defined Function!')
+                self.marksem = False
+                self.semlog = "Not Defined Function: " + shiftStr[-4]['data']
+                return
+            if len(function.params) != len(newTreeNode.tmpstack):
+                print('Not Compatiable use of function!')
+                self.marksem = False
+                self.semlog = "Not Compatiable use of function: " + shiftStr[-4]['data']
+                return
+            code_tmp = list()
+            symbol_tmp_list = copy.deepcopy(self.curFunction.params)
+            code_tmp.append(('-', 'sp', 4 * len(symbol_tmp_list) + 4, 'sp'))
+            code_tmp.append(('store', '_', 4 * len(symbol_tmp_list), 'ra'))
+            for symbol in symbol_tmp_list: 
+                code_tmp.append(('store', '_', 4 * symbol_tmp_list.index(symbol), symbol[2])) 
+            for code in reversed(code_tmp):
+                newTreeNode.midcode.insert(0, code)
+            if len(function.params) > 0:
+                newTreeNode.midcode.append(('+', 'fp', 4 * len(function.params), 'fp')) 
+            for treenode in newTreeNode.tmpstack:
+                if treenode.midval is not None:
+                    treenode_result = treenode.midval
+                else:
+                    treenode_result = treenode.statistics
+                newTreeNode.midcode.append(('push', '_', 4 * newTreeNode.tmpstack.index(treenode), treenode_result))
+            newTreeNode.midcode.append(('call', '_', '_', function.label))
+            symbol_tmp_list.reverse()
+            for symbol in symbol_tmp_list:
+                newTreeNode.midcode.append(('load', '_', 4 * symbol_tmp_list.index(symbol), symbol[2]))  # n.midval = symbol[2]
+            newTreeNode.midcode.append(('load', '_', 4 * len(symbol_tmp_list), 'ra'))  # mem[sp+4 * len(symbol_tmp_list)] -> ra
+            newTreeNode.midcode.append(('+', 'sp', 4 * len(self.curFunction.params) + 4, 'sp'))
+
+            newTreeNode.midval = self.getNewTmp()
+            newTreeNode.midcode.append((':=', 'v0', '_', newTreeNode.midval)) 
+            newTreeNode.tmpstack = list()
+
+        elif len(r) == 1 and r[0]['type'] == 'IDENTIFIER':
+            newTreeNode.statistics = shiftStr[-1]['data']
+            nTmp = self.findSymbol(newTreeNode.statistics, self.curFunction.label)
+            if nTmp is None:
+                print('Use Val that is not defined!')
+                self.marksem = False
+                self.semlog = "Undefined Variable: " + shiftStr[-1]['data']
+                return
+            newTreeNode.type = nTmp.type
+            newTreeNode.midval = nTmp.midval
+        elif len(r) == 3 and r[1]['type'] == 'expression':
+            newTreeNode = self.popStack()
+            self.calExpression(newTreeNode)
+        else:  # -> array
+            newTreeNode = self.popStack()
+            nTmp = self.findSymbol(newTreeNode.arrayname, self.curFunction.label)
+            if nTmp is None:
+                print('Not Defined Array')
+                self.marksem = False
+                self.semlog = "Not Defined Array: " + newTreeNode.arrayname
+                return
+            t_offset = self.getNewTmp()
+            if len(newTreeNode.pos) == 1:
+                newTreeNode.midcode.append((':=', str(newTreeNode.pos[0]), '-', t_offset))
+            elif len(newTreeNode.pos) == 2: 
+                newTreeNode.midcode.append(('*', str(newTreeNode.pos[0]), str(nTmp.dimensions[1]), t_offset))
+                newTreeNode.midcode.append(('+', t_offset, str(newTreeNode.pos[1]), t_offset))
+            t = self.getNewTmp()
+            newTreeNode.midcode.append(('=[]', nTmp.midval + '[' + t_offset + ']', '-', t))
+            newTreeNode.type = 'int'
+            newTreeNode.midval = t
+            newTreeNode.tmpstack = []
+
+        newTreeNode.name = nt
+        self.sStack.append(newTreeNode)
+    
+    def handleOperator(self,r,shiftStr):
+        newTreeNode = TreeNode()
+        newTreeNode.name = 'operator'
+        newTreeNode.type = ''
+        for i in range(len(r)):
+            token = shiftStr[-(len(r) - i)]
+            newTreeNode.type += token['type']
+        self.sStack.append(newTreeNode)
+    
+    def handleActualParametre(self,r,nt):
+        node = None
+        if len(r) == 3:  # formalParaList -> expression , formalParaList
+            node = self.popStack()
+            nExp = self.popStack()
+            self.calExpression(nExp)
+            node.tmpstack.insert(0, nExp)
+        elif len(r) == 1 and (r[0]['type'] in ['$']):  # $
+            node = TreeNode()
+        elif len(r) == 1 and r[0]['type'] == 'expression':  # expression
+            node = copy.deepcopy(self.popStack())
+            self.calExpression(node)
+        node.name = nt
+        self.sStack.append(node)
+    
+    def handleIf(self,r,nt):
+        newTreeNode = TreeNode()
+        newTreeNode.name = nt
+        # if ( expression ) block
+        if len(r) == 5:
+            newTreeNode.true = self.getNewLabel()
+            newTreeNode.end = self.getNewLabel()
+            nT = self.popStack()  # True
+            nExp = self.popStack()
+            self.calExpression(nExp)
+            newTreeNode.midcode.extend(nExp.midcode)
+            newTreeNode.midcode.append(('j>', nExp.midval, '0', newTreeNode.true))
+            newTreeNode.midcode.append(('j', '_', '_', newTreeNode.end))
+            newTreeNode.midcode.append((newTreeNode.true, ':', '_', '_'))
+            for code in nT.midcode: 
+                newTreeNode.midcode.append(code)
+            newTreeNode.midcode.append((newTreeNode.end, ':', '_', '_')) 
+        # if ( expression ) block else block
+        elif len(r) == 7:
+            newTreeNode.true = self.getNewLabel()
+            newTreeNode.false = self.getNewLabel()
+            newTreeNode.end = self.getNewLabel()
+            nF = self.popStack()  # False
+            nT = self.popStack()  # True
+            nExp = self.popStack()
+            self.calExpression(nExp)
+            sent = ('j', '_', '_', newTreeNode.false)
+            newTreeNode.midcode.extend(nExp.midcode)
+            newTreeNode.midcode.append(('j>', nExp.midval, '0', newTreeNode.true))
+            newTreeNode.midcode.append(sent)
+            newTreeNode.midcode.append((newTreeNode.true, ':', '_', '_'))
+            for code in nT.midcode: 
+                newTreeNode.midcode.append(code)
+            newTreeNode.midcode.append(('j', '_', '_', newTreeNode.end)) 
+            newTreeNode.midcode.append((newTreeNode.false, ':', '_', '_'))
+            for code in nF.midcode:  # false的code
+                newTreeNode.midcode.append(code)
+            newTreeNode.midcode.append((newTreeNode.end, ':', '_', '_'))
+        self.sStack.append(newTreeNode)
+    
+    def handleLoop(self,r,nt):
+        newTreeNode = TreeNode()  # 生成新节点
+        newTreeNode.name = nt
+        newTreeNode.true = self.getNewLabel()  # 四个分支的入口
+        newTreeNode.false = self.getNewLabel()
+        newTreeNode.beg = self.getNewLabel()
+        newTreeNode.end = self.getNewLabel()
+        sent = ('j', '_', '_', newTreeNode.false)
+        sent2 = ('j', '_', '_', newTreeNode.beg)
+        if r[0]['type'] == 'while':
+            statement = self.popStack()  # block
+            expression = self.popStack()  # expression
+            self.calExpression(expression)
+            newTreeNode.midcode.append((newTreeNode.beg, ':', '_', '_'))
+            for code in expression.midcode:
+                newTreeNode.midcode.append(code)
+            newTreeNode.midcode.append(('j>', expression.midval, '0', newTreeNode.true))
+            newTreeNode.midcode.append(sent)
+            newTreeNode.midcode.append((newTreeNode.true, ':', '_', '_'))
+            for code in statement.midcode:
+                if code[0] == 'break':
+                    newTreeNode.midcode.append(sent)
+                elif code[0] == 'continue':
+                    newTreeNode.midcode.append(sent2)
+                else:
+                    newTreeNode.midcode.append(code)
+            newTreeNode.midcode.append(sent2)
+            newTreeNode.midcode.append((newTreeNode.false, ':', '_', '_'))
+        self.sStack.append(newTreeNode)
+    
     # 根据语义规则进行规约
     # prod: 规约时运用的产生式, shiftStr: 移进规约串
     def semanticAnalyze(self, prod, shiftStr):
         nt = prod.lhs
         r = prod.rhs
-
-        # 主要分为说明、赋值、数组、布尔表达式、条件控制
-
-        # print("产生式规约: ", prod.toStr())
-        # print("移进规约串: ", shiftStr)
-        sys.stdout.flush()
-
-        # arrayDeclaration -> [ num ] | [ num ] arrayDeclaration
         if nt == 'arrayDeclaration':
-            if len(r) == 3:
-                n = Node()
-                n.name = nt  # 语句块标识符
-                n.type = 'int array'  # 结点数据类型
-                n.dims = [int(shiftStr[-2]['data'])]  # 数组维度
-                self.sStack.append(n)  # 将新的语法树结点加入语义分析栈
-                # self.prtNodeCode(n)
-            elif len(r) == 4:
-                n = self.sStack.pop(-1)  # 将语义分析栈中的语法树结点取出(arrayDeclaration)
-                n.name = nt
-                n.type = 'int array'
-                n.dims.insert(0, int(shiftStr[-3]['data']))  # 数组维度 在首部加入
-                self.sStack.append(n)
-                # self.prtNodeCode(n)
-
+            self.handelarrayDeclaration(nt,r,shiftStr)
         # array -> id [ expression ] | array [ expression ]
         if nt == 'array':
-            expression_n = self.sStack.pop(-1)  # 将语义分析栈中的语法树结点取出(expression)
-            self.calExpression(expression_n)  # 计算表达式的值
-            array_n = copy.deepcopy(self.sStack[-1])  # 深拷贝
-
-            if shiftStr[-4]['type'] == 'array':  # -> array [ expression ]
-                self.sStack.pop(-1)
-                expression_n.name = 'array'
-                expression_n.arrname = array_n.arrname  # 数组原始变量名字
-                expression_n.position = copy.deepcopy(array_n.position)  # 第一维符号元素在数组中的位置
-                expression_n.position.append(expression_n.place if expression_n.place else expression_n.data)
-                expression_n.place = array_n.place  # 数组对应的中间变量名字
-                expression_n.type = 'array'
-                self.sStack.append(expression_n)
-
-            else:  # -> id [ expression ]
-                expression_n.name = 'array'
-                expression_n.arrname = shiftStr[-4]['data']
-                s = shiftStr[-4]['data']  # 拿到变量名称
-                nTmp = self.findSymbol(s, self.curFuncSymbol.label)  # python 可变对象传引用
-                if nTmp == None:
-                    print('使用未定义的数组变量!')
-                    self.semanticRst = False
-                    self.semanticErrMsg = "未定义的数组变量：" + shiftStr[-4][
-                        'data']  # 在" + str(shiftStr[-4]['row']) + "行" + str(shiftStr[-4]['colum']) + "列"
-                    return
-                expression_n.position.append(
-                    expression_n.place if expression_n.place else expression_n.data)  # 第一维符号元素在数组中的位置
-                expression_n.place = s  # 数组对应的中间变量
-                expression_n.type = 'array'
-                self.sStack.append(expression_n)
-
+            self.handleArray(shiftStr)
         # program -> declarationChain
         if nt == 'program':
-            n = self.sStack.pop(-1)  # 语法树结点
-            n.name = nt
-
-            for node in n.stack:
-                for code in node.code:
-                    n.code.append(code)  # 将中间代码全部加入program结点
-
-            self.middleCode = copy.deepcopy(n.code)
-            self.sStack.append(n)
-            # self.prtNodeCode(n)
-
+            self.handleProgram(nt)
         # block -> { statementChain }
         # statement -> declaration | ifStatement | iterStatement | returnStatement | assignStatement
         elif nt in ['statement', 'block']:
-            n = self.sStack.pop(-1)
-            n.name = nt  # 仅改一下语句块标识符
-            self.sStack.append(n)
-            # self.prtNodeCode(n)
-
+            self.handleStatBlock(nt)
         # declarationChain -> $ | declaration declarationChain
         elif nt == 'declarationChain':
-            n = Node()
-            if len(r) == 2:  # declaration declarationChain
-                n = self.sStack.pop(-1)
-                n.stack.insert(0, self.sStack.pop(-1))  # 将declaration插入栈底
-            n.name = nt
-            self.sStack.append(n)
-            # self.prtNodeCode(n)
-
+            self.handleDeclarationChain(r,nt)
         # typeSpecifier -> int | void
         elif nt == 'typeSpecifier':
-            n = Node()
-            n.name = nt
-            n.type = shiftStr[-1]['type']  # 数据类型名
-            self.sStack.append(n)
-
+            self.handleTypeSpecifier(nt,shiftStr)
         # declaration -> typeSpecifier id ; | completeFunction | typeSpecifier id arrayDeclaration ;
         elif nt == 'declaration':  # variable or function
-            if len(r) == 3:  # -> typeSpecifier id ;
-                n = self.sStack.pop(-1)  # typeSpecifier
-                n.name = nt
-                defType = n.type
-                defName = shiftStr[-2]['data']  # 变量名
-                s = self.findSymbol(defName, self.curFuncSymbol.label)
-                if s is not None:
-                    print("变量重定义！")
-                    self.semanticRst = False
-                    self.semanticErrMsg = "变量重定义。"  # + str(shiftStr[-2]['row']) + "行" + str(shiftStr[-2]['colum']) + "列"
-                    return
-                else:
-                    s = Symbol()  # 生成新的一个符号
-
-                if n.place == None:  # 没有分配中间变量
-                    s.name = defName  # 语句块标识符
-                    s.place = self.getNewTemp()
-                    s.type = defType
-                    s.function = self.curFuncSymbol.label
-                    s.size = 4
-                    s.offset = self.curOffset
-                    self.curOffset += s.size
-                    self.updateSymbolTable(s)  # 将新符号s加入符号表
-
-                    if n.data is not None:  # 不是常数
-                        code = (':=', n.data, '_', s.place)
-                        n.code.append(code)
-                else:
-                    s.name = defName
-                    s.place = n.place
-                    s.type = defType
-                    s.function = self.curFuncId
-                    s.size = 4
-                    s.offset = self.curOffset
-                    self.curOffset += s.size
-                    self.updateSymbolTable(s)
-                    for code in n.code:
-                        n.code.stack.insert(0, code)
-
-            if len(r) == 4:  # -> typeSpecifier id arrayDeclaration ;
-                array_n = self.sStack.pop(-1)  # arrayDeclaration
-                n = self.sStack.pop(-1)  # typeSpecifier
-                n.name = nt
-                defType = array_n.type
-                defName = shiftStr[-3]['data']  # 数组变量名
-                s = self.findSymbol(defName, self.curFuncSymbol.label)
-                if s is not None:
-                    print("数组变量重定义！")
-                    self.semanticRst = False
-                    self.semanticErrMsg = "数组变量重定义。"  # + str(shiftStr[-2]['row']) + "行" + str(shiftStr[-2]['colum']) + "列"
-                    return
-                else:
-                    s = Symbol()
-
-                if n.place is None:  # 没有分配中间变量
-                    s.name = defName
-                    s.place = self.getNewTemp()
-                    s.type = defType
-                    s.function = self.curFuncSymbol.label
-                    s.size = 4
-                    for ndim in array_n.dims:  # 数组维度
-                        s.size *= ndim
-                    s.dims = copy.deepcopy(array_n.dims)
-                    s.offset = self.curOffset
-                    self.curOffset += s.size
-                    self.updateSymbolTable(s)
-
-                    if n.data is not None:  # 不是常数
-                        code = (':=', n.data, '_', s.place)
-                        n.code.append(code)
-
-                else:
-                    s.name = defName
-                    s.place = n.place
-                    s.type = defType
-                    s.function = self.curFuncId
-                    s.size = 4
-                    for ndim in array_n.dims:
-                        s.size *= ndim
-                    s.dims = copy.deepcopy(array_n.dims)
-                    s.offset = self.curOffset
-                    self.curOffset += s.size
-                    self.updateSymbolTable(s)
-
-                    for code in n.code:
-                        n.code.stack.insert(0, code)
-
-            if len(r) == 1:  # -> completeFunction
-                n = self.sStack.pop(-1)
-                n.name = nt
-
-            # self.prtNodeCode(n)
-            self.sStack.append(n)
-
+            self.handleDeclaration(r,nt,shiftStr)
         # completeFunction -> declareFunction block
         elif nt == 'completeFunction':
-            n = self.sStack.pop(-1)  # block
-            nDefine = self.sStack.pop(-1)  # declareFunction
-
-            n.name = nt
-            codeTmp = []
-            codeTmp.append((nDefine.data, ':', '_', '_'))  # 函数名
-
-            for node in nDefine.stack:  # para
-                codeTmp.append(('pop', '_', 4 * nDefine.stack.index(node), node.place))
-
-            if len(nDefine.stack) > 0:
-                codeTmp.append(('-', 'fp', 4 * len(nDefine.stack), 'fp'))
-
-            for code in reversed(codeTmp):  # 栈先进后出
-                n.code.insert(0, code)
-
-            code_end = n.code[-1]
-            if code_end[0][0] == 'l':  # 非main函数
-                label = code_end[0]
-                n.code.remove(code_end)
-                for code in n.code:
-                    if code[3] == label:
-                        n.code.remove(code)
-
-            # self.prtNodeCode(n)
-            self.sStack.append(n)
-
+            self.handleCompleteFunction(nt)
         # declareFunction -> typeSpecifier id ( formalParaList )
         elif nt == 'declareFunction':
-            n = self.sStack.pop(-1)  # formalParaList
-            n.name = nt
-            nFuncReturnType = self.sStack.pop(-1)  # typeSpecifier
-            f = FunctionSymbol()  # 登记函数
-            f.name = shiftStr[-4]['data']  # id
-            f.type = nFuncReturnType.type
-            if f.name == 'main':
-                f.label = 'main'
-            else:
-                f.label = self.getNewFuncLabel()
-
-            # 搜索formalParaList表，记录参数列表
-            # self.prtNodeStack(n)
-            for arg in n.stack:
-                s = Symbol()
-                s.name = arg.data  # 处理para时，变量名放data
-                s.place = arg.place  # 此时是None
-
-                s.type = arg.type
-                s.function = f.label
-                s.size = 4
-                s.offset = self.curOffset
-                self.curOffset += s.size
-                self.updateSymbolTable(s)
-
-                f.params.append((arg.data, arg.type, arg.place))  # 新增函数中的形参
-
-            n.data = f.label
-            self.updateFuncTable(f)
-            self.stack = []  # 清空
-            self.curFuncSymbol = f
-            self.sStack.append(n)
-
+            self.handleDeclareFunction(nt,shiftStr)
         # formalParaList -> $ | para | para, formalParaList | void
         elif nt == 'formalParaList':
-            n = Node()
-            if len(r) == 3:  # formalParaList -> para , formalParaList
-                n = self.sStack.pop(-1)
-                n.name = nt
-                n.stack.insert(0, self.sStack.pop(-1))
-
-            elif len(r) == 1 and (r[0]['type'] in ['$', 'void']):  # $ | void
-                n.name = nt
-
-            elif len(r) == 1 and r[0]['type'] == 'para':  # para
-                n.stack.insert(0, self.sStack.pop(-1))
-                n.name = nt
-
-            # self.prtNodeStack(n)
-            self.sStack.append(n)
-
+            self.handleFormalParalist(r,nt)
         # para -> typeSpecifier id
         elif nt == 'para':
-            n = self.sStack.pop(-1)  # typeSpecifier node
-            n.name = nt
-            n.place = self.getNewTemp()  # 形参不在符号表里登记
-            n.data = shiftStr[-1]['data']  # id在para node的data里
-            self.sStack.append(n)
-
+            self.handlePara(nt,shiftStr)
         # statementChain -> $ | statement statementChain
         elif nt == 'statementChain':
-            if len(r) == 1:  # $
-                n = Node()
-                n.name = nt
-                self.sStack.append(n)
-            elif len(r) == 2:  # statement statementChain
-                n = self.sStack.pop(-1)
-                n.stack.insert(0, self.sStack.pop(-1))
-                n.name = nt
-
-                # statement.code，statementChain.code是顺序的, 但前者要在后者前面
-                for code in reversed(n.stack[0].code):
-                    n.code.insert(0, code)
-
-                # self.prtNodeCode(n)
-                self.sStack.append(n)
-
+            self.handleStatementChain(r,nt)
         # assignStatement -> id = expression ; | array = expression ;
         elif nt == 'assignStatement':
-            if shiftStr[-4]['type'] != 'array':  # id = expression ;
-                id = shiftStr[-4]['data']  # 取id的名字
-                n = copy.deepcopy(self.sStack.pop(-1))  # expression
-                n.name = nt
-                self.calExpression(n)
-
-                s = self.findSymbol(id, self.curFuncSymbol.label)
-                if s is None:
-                    print("使用未定义变量！")
-                    self.semanticRst = False
-                    self.semanticErrMsg = "使用未定义变量。"  # + str(shiftStr[-4]['row']) + "行" + str(shiftStr[-4]['colum']) + "列"
-                    return
-
-                if s.type != n.type:  # 数据类型不一致
-                    token = shiftStr[-4]
-                    self.semanticRst = False
-                    self.semanticErrMsg = "赋值时变量类型错误" + token[
-                        'data']  # + '，在' + str(token['row']) + "行" + str(token['colum']) + "列"
-                    return
-
-                sys.stdout.flush()
-                code = None
-                if n.place is not None:  # a = 1;不存在n.place
-                    code = (':=', n.place, '_', s.place)
-                else:
-                    code = (':=', n.data, '_', s.place)
-                n.code.append(code)
-                # self.prtNodeCode(n)
-                sys.stdout.flush()
-                self.sStack.append(n)
-            else:  # -> array = expression ;
-                # self.prtSemanticStack()
-                n = copy.deepcopy(self.sStack.pop(-1))  # expression
-                n.name = nt
-
-                array_n = self.sStack.pop(-1)
-                array_name = array_n.arrname  # 取到数组的名字
-
-                # self.prtNodeStack(n)
-                self.calExpression(n)  # 计算表达式的值
-                # self.prtNodeStack(n)
-
-                s = self.findSymbol(array_name, self.curFuncSymbol.label)
-                if s is None:
-                    print("使用未定义的数组变量！")
-                    self.semanticRst = False
-                    self.semanticErrMsg = "使用未定义的数组变量！" + array_name
-                    return
-                sys.stdout.flush()
-
-                t_offset = self.getNewTemp()  # 偏移地址临时变量
-                if len(array_n.position) == 1:  # 一维数组
-                    n.code.append((':=', str(array_n.position[0]), '-', t_offset))
-                elif len(array_n.position) == 2:  # 二维数组
-                    n.code.append(('*', str(array_n.position[0]), str(s.dims[1]), t_offset))
-                    n.code.append(('+', t_offset, str(array_n.position[1]), t_offset))
-
-                if n.place is not None:
-                    code = ('[]=', n.place, '_', s.place + '[' + t_offset + ']')
-                else:
-                    t = self.getNewTemp()
-                    code = (':=', n.data, '_', t)  # 先将值赋给一个中间变量
-                    n.code.append(code)
-                    code = ('[]=', t, '_', s.place + '[' + t_offset + ']')
-                n.code.append(code)
-                # self.prtNodeCode(n)
-                sys.stdout.flush()
-                self.sStack.append(n)
-
+            self.handleAssignStatement(nt,shiftStr)
         # returnStatement -> return expression; | return;
         elif nt == 'returnStatement':
-            n = None
-            if len(r) == 3:  # return expression
-                n = self.sStack.pop(-1)  # expression
-
-                # 计算返回值
-                self.calExpression(n)
-                n.type = r[0]['type']  # == return
-
-                nRst = None
-                if n.place != None:
-                    nRst = n.place  # 返回存放expression的变量
-                else:
-                    nRst = n.data  # 返回expression的值(可能就等于一个常量)
-                n.code.append((':=', nRst, '_', 'v0'))  # 返回地址
-            elif len(r) == 2:  # return
-                n = Node()
-                n.type = r[0]['type']
-
-            n.code.append((n.type, '_', '_', '_'))  # return
-            n.name = nt
-            self.sStack.append(n)
-            # self.prtNodeCode(n)
-
+            self.handleReturnStatement(r,nt)
         # expression -> primaryExpression | primaryExpression operator expression
         elif nt == 'expression':
-            n = None
-            if len(r) == 1:  # expression -> primaryExpression
-                n = copy.deepcopy(self.sStack[-1])  # primaryExpression
-                # self.prtNodeStack(n)
-                sys.stdout.flush()
-                n.stack.insert(0, self.sStack.pop(-1))  # primaryExpression
-
-            elif len(r) == 3:  # expression -> primaryExpression operator expression
-                n = copy.deepcopy(self.sStack.pop(-1))  # expression
-                n.stack.insert(0, self.sStack.pop(-1))  # operator
-                n.stack.insert(0, self.sStack.pop(-1))  # primaryExpression
-
-            n.name = nt
-            self.sStack.append(n)
-            # self.prtNodeStack(n)
-            sys.stdout.flush()
-
+            self.handleExpression(r,nt)
         # primaryExpression -> num | ( expression ) | id ( actualParaList ) | id | array
         elif nt == 'primaryExpression':
-            n = Node()
-            if len(r) == 1 and r[0]['type'] == 'INT':  # num
-                n.data = shiftStr[-1]['data']  # 具体数字
-                n.type = shiftStr[-1]['type'].lower()  # int
-
-            # id ( actualParaList )
-            elif len(r) == 4 and r[0]['type'] == 'IDENTIFIER':  # 找定义过的
-                function = self.findFuncSymbolByName(shiftStr[-4]['data'])
-                n = self.sStack.pop(-1)  # actualParaList
-                n.name = nt
-                if function is None:
-                    print('使用未定义的函数!')
-                    self.semanticRst = False
-                    self.semanticErrMsg = "未定义的函数：" + shiftStr[-4]['data']
-                    return
-
-                # print('测试过程调用: ', len(function.params), len(n.stack))
-                if len(function.params) != len(n.stack):
-                    print('实参和形参个数不匹配!')
-                    sys.stdout.flush()
-                    self.semanticRst = False
-                    self.semanticErrMsg = "实参和形参个数不匹配：" + shiftStr[-4]['data']
-                    return
-
-                code_temp = []
-                symbol_temp_list = copy.deepcopy(self.curFuncSymbol.params)  # 获取调用函数参数
-                code_temp.append(('-', 'sp', 4 * len(symbol_temp_list) + 4, 'sp'))  # 注意+4给ra留空间 ra子程序返回地址
-                code_temp.append(('store', '_', 4 * len(symbol_temp_list), 'ra'))  # 保存ra的值避免复写,把ra的值存放到mem[sp+4 * len(symbol_temp_list)]
-                for symbol in symbol_temp_list:  # 保存变量 因为是值传递，这里都还是t1
-                    code_temp.append(('store', '_', 4 * symbol_temp_list.index(symbol), symbol[2]))  # symbol[2]是place
-                for code in reversed(code_temp):
-                    n.code.insert(0, code)
-
-                if len(function.params) > 0:
-                    n.code.append(('+', 'fp', 4 * len(function.params), 'fp'))  # 被调用函数
-
-                for node in n.stack:  # 实参列表
-                    if node.place is not None:  # 有分配中间变量
-                        node_result = node.place
-                    else:
-                        node_result = node.data
-                    n.code.append(('push', '_', 4 * n.stack.index(node), node_result))  # 把node_result的值存放到mem[fp+4 * n.stack.index(node)]
-                n.code.append(('call', '_', '_', function.label))
-
-                symbol_temp_list.reverse()
-                for symbol in symbol_temp_list:
-                    n.code.append(('load', '_', 4 * symbol_temp_list.index(symbol), symbol[2]))  # n.place = symbol[2]
-                n.code.append(('load', '_', 4 * len(symbol_temp_list), 'ra'))  # mem[sp+4 * len(symbol_temp_list)] -> ra
-                n.code.append(('+', 'sp', 4 * len(self.curFuncSymbol.params) + 4, 'sp'))
-
-                n.place = self.getNewTemp()
-                n.code.append((':=', 'v0', '_', n.place))  # 返回值赋给n
-                # ! 关键！保证primary的stack是空的 express里的stack的node个数必为2n + 1
-                n.stack = []
-
-            elif len(r) == 1 and r[0]['type'] == 'IDENTIFIER':  # id
-                n.data = shiftStr[-1]['data']  # 拿到变量名称
-                nTmp = self.findSymbol(n.data, self.curFuncSymbol.label)
-                if nTmp is None:
-                    print('使用未定义变量!')
-                    self.semanticRst = False
-                    self.semanticErrMsg = "未定义的变量：" + shiftStr[-1][
-                        'data']  # + "，在" + str(shiftStr[-1]['row']) + "行" + str(shiftStr[-1]['colum']) + "列"
-                    return
-                n.type = nTmp.type
-                n.place = nTmp.place
-
-            # ( expression )
-            elif len(r) == 3 and r[1]['type'] == 'expression':
-                n = self.sStack.pop(-1)
-                self.calExpression(n)  # 有优先级
-
-            else:  # -> array
-                n = self.sStack.pop(-1)
-                nTmp = self.findSymbol(n.arrname, self.curFuncSymbol.label)
-                if nTmp is None:
-                    print('使用未定义数组变量!')
-                    self.semanticRst = False
-                    self.semanticErrMsg = "未定义的数组变量！" + n.arrname
-                    return
-
-                t_offset = self.getNewTemp()  # 偏移地址临时变量
-                if len(n.position) == 1:  # 一维数组
-                    n.code.append((':=', str(n.position[0]), '-', t_offset))
-                elif len(n.position) == 2:  # 二维数组
-                    n.code.append(('*', str(n.position[0]), str(nTmp.dims[1]), t_offset))
-                    n.code.append(('+', t_offset, str(n.position[1]), t_offset))
-
-                t = self.getNewTemp()  # 临时变量
-                n.code.append(('=[]', nTmp.place + '[' + t_offset + ']', '-', t))
-                n.type = 'int'
-                n.place = t
-                n.stack = []  # 栈清空
-
-            n.name = nt
-            self.sStack.append(n)
-            # self.prtNodeStack(n)
-            # self.prtNodeCode(n)
-            sys.stdout.flush()
-
+            self.handlePrimaryExpression(r,nt,shiftStr)
         # operator -> + | - | * | / | < | <= | >= | > | == | !=
         elif nt == 'operator':
-            n = Node()
-            n.name = 'operator'
-            n.type = ''
-            for i in range(len(r)):
-                token = shiftStr[-(len(r) - i)]
-                n.type += token['type']
-            self.sStack.append(n)
-
+            self.handleOperator(r,shiftStr)
         # actualParaList -> $ | expression | expression, actualParaList
         elif nt == 'actualParaList':
-            n = None
-            if len(r) == 3:  # formalParaList -> expression , formalParaList
-                n = self.sStack.pop(-1)
-                nExp = self.sStack.pop(-1)
-                self.calExpression(nExp)
-                n.stack.insert(0, nExp)
-
-            elif len(r) == 1 and (r[0]['type'] in ['$']):  # $
-                n = Node()
-
-            elif len(r) == 1 and r[0]['type'] == 'expression':  # expression
-                n = copy.deepcopy(self.sStack.pop(-1))
-                self.calExpression(n)
-                # self.prtNodeStack(n)
-
-            n.name = nt
-            # self.prtNodeStack(n)
-            # self.prtNodeCode(n)
-            self.sStack.append(n)
-            sys.stdout.flush()
-
+            self.handleActualParametre(r,nt)
         # ifStatement | if ( expression ) block | if ( expression ) block else block
         elif nt == 'ifStatement':
-            n = Node()
-            n.name = nt
-
-            # if ( expression ) block
-            if len(r) == 5:
-                n.true = self.getNewLabel()
-                n.end = self.getNewLabel()
-                nT = self.sStack.pop(-1)  # True
-                nExp = self.sStack.pop(-1)
-                self.calExpression(nExp)
-                n.code.extend(nExp.code)
-                n.code.append(('j>', nExp.place, '0', n.true))  # expression成立
-                n.code.append(('j', '_', '_', n.end))  # expression不成立
-                n.code.append((n.true, ':', '_', '_'))  # 下一句开始true的代码
-                for code in nT.code:  # true时的code
-                    n.code.append(code)
-                n.code.append((n.end, ':', '_', '_'))  # 循环出口
-
-            # if ( expression ) block else block
-            elif len(r) == 7:
-                n.true = self.getNewLabel()
-                n.false = self.getNewLabel()
-                n.end = self.getNewLabel()
-                nF = self.sStack.pop(-1)  # False
-                nT = self.sStack.pop(-1)  # True
-                nExp = self.sStack.pop(-1)
-                self.calExpression(nExp)
-
-                n.code.extend(nExp.code)
-
-                n.code.append(('j>', nExp.place, '0', n.true))
-                n.code.append(('j', '_', '_', n.false))
-                n.code.append((n.true, ':', '_', '_'))
-                for code in nT.code:  # true的code
-                    n.code.append(code)
-                n.code.append(('j', '_', '_', n.end))  # true的code结束转向出口
-                n.code.append((n.false, ':', '_', '_'))
-                for code in nF.code:  # false的code
-                    n.code.append(code)
-                n.code.append((n.end, ':', '_', '_'))
-
-            self.sStack.append(n)
-
+            self.handleIf(r,nt)
         # iterStatement -> while ( expression ) block
         elif nt == 'iterStatement':
-            n = Node()  # 生成新节点
-            n.name = nt
-            n.true = self.getNewLabel()  # 四个分支的入口
-            n.false = self.getNewLabel()
-            n.begin = self.getNewLabel()
-            n.end = self.getNewLabel()
-
-            if r[0]['type'] == 'while':
-                statement = self.sStack.pop(-1)  # block
-                expression = self.sStack.pop(-1)  # expression
-                self.calExpression(expression)
-                n.code.append((n.begin, ':', '_', '_'))
-                for code in expression.code:
-                    n.code.append(code)
-                n.code.append(('j>', expression.place, '0', n.true))
-                n.code.append(('j', '_', '_', n.false))
-                n.code.append((n.true, ':', '_', '_'))
-                for code in statement.code:
-                    if code[0] == 'break':
-                        n.code.append(('j', '_', '_', n.false))
-                    elif code[0] == 'continue':
-                        n.code.append(('j', '_', '_', n.begin))
-                    else:
-                        n.code.append(code)
-                n.code.append(('j', '_', '_', n.begin))
-                n.code.append((n.false, ':', '_', '_'))
-
-            self.sStack.append(n)
-
-        # self.prtFuncTable()
-        # self.prtSymbolTable()
-        # self.prtSemanticStack()
-        # print("=====================================================================")
-        sys.stdout.flush()
+            self.handleLoop(r,nt)
         return
 
     # 在符号表里查找符号
     def findSymbol(self, name, function):
-        for s in self.symbolTable:
-            if s.name == name and s.function == function:  # 同一个函数内的同一个符号
-                return s
+        for func in self.symbolTable:
+            condition = (func.name == name and func.function == function)
+            if condition :
+                return func
         return None
 
     # 更新符号表
@@ -729,90 +606,62 @@ class SemanticAnalyser:
         self.symbolTable.append(symbol)
         return
 
-    # 在函数表里查找函数
-    def findFuncSymbolByName(self, name):
-        for f in self.funcTable:
-            if f.name == name:
-                return f
-        return None
-
     # 更新函数表
-    def updateFuncTable(self, functionSymbol):
+    def updateFuncTable(self, func):
         for f in self.funcTable:
-            if f.name == functionSymbol.name:  # 函数名相同
+            condition = f.name == func.name
+            if condition: 
                 self.funcTable.remove(f)
                 break
-        self.funcTable.append(functionSymbol)
+        self.funcTable.append(func)
         return
 
     # 获得新的结点
-    def getNewTemp(self):
-        self.curTempId += 1  # 中间变量名
-        return "t" + str(self.curTempId)
+    def getNewTmp(self):
+        time = "t" + str(self.midValid + 1)
+        self.midValid += 1 
+        return time 
 
     # 获得新的标签
     def getNewLabel(self):
-        self.curLabelId += 1  # 当前 label 入口序号
+        self.curLabelId += 1
         return 'l' + str(self.curLabelId)
-
-    # 获得新的函数标签
-    def getNewFuncLabel(self):
-        self.curFuncId += 1  # 当前 function 序号
-        return 'f' + str(self.curFuncId)
 
     # 生成代码emit
     # 对于 expression 节点 n, 生成对应代码, 放在属性 code 里
     def calExpression(self, n):
-        if len(n.stack) == 1:  # 只有一个值 不用三元计算 stack是翻译闭包表达式所用的临时栈
-            n = copy.deepcopy(n.stack[0])
-            # self.prtNodeCode(n)
-            n.stack = []
+        if len(n.tmpstack) == 1:
+            n = copy.deepcopy(n.tmpstack[0])
+            n.tmpstack = list()
             return True
-
-        # 所有要计算的节点都已经在stack里了，其实相当于生成一个新节点
-        n.code = []
-        # self.prtNodeStack(n)
-        sys.stdout.flush()
-
-        nLeft = n.stack.pop(0)  # 新的node
-        while len(n.stack) > 0:
-            nOp = n.stack.pop(0)
-            nRight = n.stack.pop(0)
-
-            if nLeft.place is None:  # 说明是一个常数
-                arg1 = nLeft.data  # arg1常数
-            else:
-                arg1 = nLeft.place  # arg1是中间变量
-
-            if nRight.place is None:  # 说明是一个常数
-                arg2 = nRight.data  # arg1常数
-            else:
-                arg2 = nRight.place  # arg1是中间变量
-
-            if len(nLeft.code) > 0:
-                for code in nLeft.code:
-                    n.code.append(code)  # 加入arg1的code
-
-            if len(nRight.code) > 0:
-                for code in nRight.code:
-                    n.code.append(code)  # 加入arg2的code
-
-            nRst = Node()
-            nRst.name = None  # 不需要名字
-            nRst.place = self.getNewTemp()  # 中间变量
-            nRst.type = nRight.type  # 数据类型
-            code = (nOp.type, arg1, arg2, nRst.place)
-            n.code.append(code)
-
-            nLeft = nRst
+        n.midcode = list()
+        nLeft = n.tmpstack.pop(0)
+        while len(n.tmpstack) > 0:
+            t = n.tmpstack.pop(0)
+            nRight = n.tmpstack.pop(0)
+            arg1 = nLeft.statistics if nLeft.midval is None else nLeft.midval
+            arg2 = nRight.statistics if nRight.midval is None else nRight.midval
+            if len(nLeft.midcode) > 0:
+                for code in nLeft.midcode:
+                    n.midcode.append(code)
+            if len(nRight.midcode) > 0:
+                for code in nRight.midcode:
+                    n.midcode.append(code)
+            newTreeNode = TreeNode()
+            newTreeNode.name = None 
+            newTreeNode.midval = self.getNewTmp()
+            newTreeNode.type = nRight.type
+            code = (t.type, arg1, arg2, newTreeNode.midval)
+            n.midcode.append(code)
+            nLeft = newTreeNode
             n.type = nRight.type
-        n.place = n.code[-1][3]  # expression的中间变量名
+        n.midval = n.midcode[-1][3]
         return True
 
     # 将中间代码保存到文件中
     def saveMidCodeToFile(self,midcode):
         text = ''
-        for code in self.middleCode:
+        for code in self.mid_Code:
             text += '{}, {}, {}, {}\n'.format(code[0], code[1], code[2], code[3])
         middleCodeObj = open(midcode, 'w+')
         middleCodeObj.write(text)

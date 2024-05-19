@@ -5,7 +5,7 @@ import sys
 # 目标代码生成器
 class ObjectCodeGenerator:
     def __init__(self, middleCode, symbolTable, funcTable):
-        self.middleCode = copy.deepcopy(middleCode)  # 中间代码
+        self.mid_Code = copy.deepcopy(middleCode)  # 中间代码
         self.symbolTable = copy.deepcopy(symbolTable)  # 符号表
         self.funcNameTable = []  # 函数名表
         for f in funcTable:
@@ -81,7 +81,7 @@ class ObjectCodeGenerator:
         for reg in self.regTable:
             if self.regTable[reg] == varFreed:
                 for item in self.symbolTable:
-                    if item.place == varFreed:  # t1, t2, ...
+                    if item.midval == varFreed:  # t1, t2, ...
                         self.mipsCode.append('addi $at, $zero, 0x{}'.format(self.DATA_SEGMENT))  # $at 一号寄存器
                         self.mipsCode.append('sw {}, {}($at)'.format(reg, item.offset))  # 存数指令, reg->mem[at+offset]
                         self.regTable[reg] = ''
@@ -93,7 +93,7 @@ class ObjectCodeGenerator:
     # 生成mips目标代码
     def genMips(self):
         mc = self.mipsCode
-        dc = self.middleCode
+        dc = self.mid_Code
 
         dc.insert(0, ('call', '_', '_', 'programEnd'))
         dc.insert(0, ('call', '_', '_', 'main'))
@@ -102,9 +102,9 @@ class ObjectCodeGenerator:
         for s in self.symbolTable:
             if s.type == 'int array':  # 数组的中间变量名
                 size = 4  # 单位字节
-                for dim in s.dims:
+                for dim in s.dimensions:
                     size *= int(dim)  # 数组大小
-                mc.append('    ' + s.place + ': .space ' + str(size))
+                mc.append('    ' + s.midval + ': .space ' + str(size))
 
         mc.append('')
         mc.append('.text')  # 代码段

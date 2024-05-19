@@ -35,7 +35,7 @@ class SyntacticAnalyzer:
 
         self.syntacticRst = True
         self.syntacticErrMsg = "语法分析成功！"
-        self.semantic = SemanticAnalyser()  # 语法分析的同时进行语义分析
+        self.semantic = SemAnalyzer()  # 语法分析的同时进行语义分析
 
         return
 
@@ -131,7 +131,7 @@ class SyntacticAnalyzer:
                 prodIdx = int(target)  # 产生式序号
                 prod = self.procedures[prodIdx]  # 根据序号找到对应的产生式
                 self.semantic.semanticAnalyze(prod, shiftStr)
-                if not self.semantic.semanticRst:
+                if not self.semantic.marksem:
                     return False
 
                 rightLen = len(prod.rhs)

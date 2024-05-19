@@ -43,13 +43,13 @@ def compiler(input_file):
     if ana.syntacticRst == False:
         print('compile failure',ana.syntacticErrMsg)
         return
-    if ana.semantic.semanticRst == False:
-        print('compile failure',ana.semantic.semanticErrMsg)
+    if ana.semantic.marksem == False:
+        print('compile failure',ana.semantic.semlog)
         return
     MidCode = 'MidCode.txt'
     ana.semantic.saveMidCodeToFile(os.path.join(directoryname,MidCode))
     print('compile success!')
-    ocg = ObjectCodeGenerator(ana.semantic.middleCode,ana.semantic.symbolTable,ana.semantic.funcTable)
+    ocg = ObjectCodeGenerator(ana.semantic.mid_Code,ana.semantic.symbolTable,ana.semantic.funcTable)
     ocg.genMips()
     tokens = lex.origin_tokens(originCode)
     lex_csv = 'lex.csv'
@@ -103,7 +103,7 @@ def compiler(input_file):
         item['type'] = symbol[i].type
         item['size'] = symbol[i].size
         item['offset'] = symbol[i].offset
-        item['place'] = symbol[i].place 
+        item['place'] = symbol[i].midval 
         item['function'] = symbol[i].function 
         symbols.append(item)
     header = symbols[0].keys()
