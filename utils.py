@@ -229,7 +229,7 @@ class CFG:
         self.startProd = None  # 广义文法起始符
         self.firstSet = {}  # first集，{symbol:[],}
         # 保留字
-        self.reserved = {
+        self.reservation = {
             'if': 'IF',
             'else': 'ELSE',
             'while': 'WHILE',
@@ -297,7 +297,7 @@ class CFG:
                         if match == 1:  # 界符 操作符
                             tempToken2 = {'type': item, 'class': 'T',
                                           'name': self.type[self.regexs.index(regex)].upper()}
-                        elif item in self.reserved:  # 保留字
+                        elif item in self.reservation:  # 保留字
                             tempToken2 = {'type': item, 'class': 'T', 'name': item}
                         elif item == 'id':  # 标识符
                             tempToken2 = {'type': 'IDENTIFIER', 'class': 'T', 'name': 'IDENTIFIER'}

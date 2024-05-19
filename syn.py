@@ -89,7 +89,7 @@ class SyntacticAnalyzer:
     # 分析语句
     def isRecognizable(self, originCode):
         inputStr = []  # 输入串
-        inputStr += self.lex.getTokensOfOneLine(originCode)  # 一行源代码
+        inputStr += self.lex.oneline_tokens(originCode)  # 一行源代码
         sys.stdout.flush()
         stateStack = []  # 栈内状态序列
         shiftStr = []  # 移进规约串
@@ -103,7 +103,7 @@ class SyntacticAnalyzer:
 
         while True:
             if len(inputStr) <= 2:
-                tmpInputStr = self.lex.getTokensOfOneLine(originCode)
+                tmpInputStr = self.lex.oneline_tokens(originCode)
                 if len(tmpInputStr) == 0:  # 源代码结束
                     inputStr.append(wallSymbol)
                 else:

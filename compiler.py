@@ -25,9 +25,9 @@ def compiler(input_file):
     else:
         os.mkdir(directoryname)
         print(f"Directory '{directoryname}' created.")
-    lex = LexicalAnalyzer()
+    lex = LexAnalyzer()
     cfg = CFG()
-    cfg.readGrammerFile('./productions.txt')
+    cfg.readGrammerFile('./productions/productions.txt')
     cfg.getDotItems()
     cfg.calFirstSet()
     family  = ItemSetSpecificationFamily(cfg)
@@ -48,7 +48,7 @@ def compiler(input_file):
     print('compile success!')
     ocg = ObjectCodeGenerator(ana.semantic.middleCode,ana.semantic.symbolTable,ana.semantic.funcTable)
     ocg.genMips()
-    tokens = lex.genTokensFromInputBox(originCode)
+    tokens = lex.origin_tokens(originCode)
     lex_csv = 'lex.csv'
     header = tokens[0].keys()
     with open(os.path.join(directoryname,lex_csv),mode='w',newline='') as f: 
