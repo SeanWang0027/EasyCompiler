@@ -11,26 +11,26 @@ class SyntacticAnalyzer:
         self.lex = lex  # 词法分析结果
         self.cfg = cfg  # 文件读入类实例化 产生式
         self.family = family  # 项目集族 LR0项目集
-        self.EndSymbol = cfg.EndSymbol
-        self.OriginStartSymbol = cfg.OriginStartSymbol
-        self.StartSymbol = cfg.StartSymbol
-        self.TerminalSymbols = cfg.TerminalSymbols
-        self.NonTerminalSymbols = cfg.NonTerminalSymbols
+        self.End = cfg.End
+        self.OriginStart = cfg.OriginStart
+        self.Start = cfg.Start
+        self.Terminals = cfg.Terminals
+        self.NonTerminals = cfg.NonTerminals
 
         self.itemSets = family.itemSets  # 状态集合
         self.edges = family.edges
         self.numSet = len(self.itemSets)
 
-        ACTIONTitle = self.TerminalSymbols  # ACTION表面临的输入符号
-        ACTIONTitle.append(self.EndSymbol)
+        ACTIONTitle = self.Terminals  # ACTION表面临的输入符号
+        ACTIONTitle.append(self.End)
 
         self.ACTION = {y.name: {x: ' ' for x in ACTIONTitle} for y in self.itemSets}  # ACTION表
-        self.GOTO = {y.name: {x: ' ' for x in self.NonTerminalSymbols} for y in self.itemSets}  # GOTO表
+        self.GOTO = {y.name: {x: ' ' for x in self.NonTerminals} for y in self.itemSets}  # GOTO表
 
-        self.prods = cfg.prods  # 产生式
-        self.prodStrs = [i.toStr() for i in self.prods]
+        self.procedures = cfg.procedures  # 产生式
+        self.procedurestrs = [i.toStr() for i in self.procedures]
 
-        self.MTitle = self.TerminalSymbols + self.NonTerminalSymbols
+        self.MTitle = self.Terminals + self.NonTerminals
         self.M = {y.name: {x: ' ' for x in self.MTitle} for y in self.itemSets}  # 总表
 
         self.syntacticRst = True
@@ -45,7 +45,7 @@ class SyntacticAnalyzer:
         for right in item.rhs:
             tempStr += (right['type'] + ' ')
         tempStr += '# '
-        return self.prodStrs.index(tempStr)
+        return self.procedurestrs.index(tempStr)
 
     # 输入字符串分析 S05 P92
     def getParseRst(self):
@@ -55,16 +55,16 @@ class SyntacticAnalyzer:
     def getTables(self):
         self.rst = []
         for e in self.edges:
-            if e['symbol'] in self.TerminalSymbols:  # symbol是终结符，构建ACTION表
+            if e['symbol'] in self.Terminals:  # symbol是终结符，构建ACTION表
                 self.M[e['start']][e['symbol']] = 'shift ' + e['end']
 
-            if e['symbol'] in self.NonTerminalSymbols:  # symbol是非终结符，构建GOTO表
+            if e['symbol'] in self.NonTerminals:  # symbol是非终结符，构建GOTO表
                 self.M[e['start']][e['symbol']] = 'goto ' + e['end']
 
         for I in self.itemSets:
             for item in I.items:
                 if item.dot_position == len(item.rhs):  # dot在最后,要规约了
-                    if item.lhs == self.OriginStartSymbol and item.terms[0] == '#':
+                    if item.lhs == self.OriginStart and item.terms[0] == '#':
                         if self.M[I.name][item.terms[0]] != ' ':
                             print('LR(1)分析表有多重入口！')
                         self.M[I.name][item.terms[0]] = 'acc'
@@ -75,7 +75,7 @@ class SyntacticAnalyzer:
                     continue
 
                 if len(item.rhs) == 1 and item.rhs[0]['type'] == '$':
-                    if item.lhs == self.OriginStartSymbol and item.terms[0] == '#':
+                    if item.lhs == self.OriginStart and item.terms[0] == '#':
                         if self.M[I.name][item.terms[0]] != ' ':
                             print('LR(1)分析表有多重入口！')
                         self.M[I.name][item.terms[0]] = 'acc'
@@ -129,7 +129,7 @@ class SyntacticAnalyzer:
 
             elif act == 'reduce':  # 规约操作
                 prodIdx = int(target)  # 产生式序号
-                prod = self.prods[prodIdx]  # 根据序号找到对应的产生式
+                prod = self.procedures[prodIdx]  # 根据序号找到对应的产生式
                 self.semantic.semanticAnalyze(prod, shiftStr)
                 if not self.semantic.semanticRst:
                     return False
@@ -150,7 +150,7 @@ class SyntacticAnalyzer:
                     X = {'class': 'NT', 'type': prod.lhs}  # 产生式的左边
 
             elif act == 'acc':  # 接受操作
-                self.semantic.semanticAnalyze(self.prods[1], shiftStr)
+                self.semantic.semanticAnalyze(self.procedures[1], shiftStr)
                 return True
 
             else:
@@ -158,30 +158,3 @@ class SyntacticAnalyzer:
                 sys.stdout.flush()
                 self.syntacticErrMsg = "语法分析错误,请检查语法"
                 return False
-
-    def prtMTables(self):
-        print('----------- 打印 M 表 --------------')
-        for i in self.M.keys():
-            print(i, self.M[i])
-        return
-
-    def prtTables(self):
-        print('-------------- 打印ACTION表 --------------')
-        for i in self.ACTION.keys():
-            print(i, self.ACTION[i])
-
-        print('----------- 打印GOTO表 --------------')
-        for i in self.GOTO.keys():
-            print(i, self.GOTO[i])
-        return
-
-    def prtStep(self, stateStack, shiftStr, inputStr):
-        print('----------- 打印规约过程 --------------')
-        shiftList = []
-        inputList = []
-        for s in shiftStr:
-            shiftList.append(s['type'])
-        for s in inputStr:
-            inputList.append(s['type'])
-        print(stateStack, shiftList, inputList, '\n')
-        return

@@ -5,13 +5,13 @@ from itemset import *
 # 最终项目族的DFA
 class ItemSetSpecificationFamily:
     def __init__(self, cfg):
-        self.TerminalSymbols = cfg.TerminalSymbols  # 终结符表
-        self.NonTerminalSymbols = cfg.NonTerminalSymbols  # 非终结符表
-        self.StartSymbol = cfg.StartSymbol  # 是program_
-        self.EndSymbol = cfg.EndSymbol  # 是#
+        self.Terminals = cfg.Terminals  # 终结符表
+        self.NonTerminals = cfg.NonTerminals  # 非终结符表
+        self.Start = cfg.Start  # 是program_
+        self.End = cfg.End  # 是#
         self.Epsilon = cfg.Epsilon
 
-        self.symbols = self.TerminalSymbols + self.NonTerminalSymbols
+        self.symbols = self.Terminals + self.NonTerminals
         self.itemPool = cfg.items  # itemPool：由产生式加点后的项目池
         self.itemSets = []  # 从pool中用GO函数划分  DFA不同的状态
         self.edges = []  # 项目集之间的转移  {'start': I.name, 'symbol': X, 'end': tempItemSet.name}
@@ -153,16 +153,4 @@ class ItemSetSpecificationFamily:
                         isBigger = 1
             if isBigger == 0:
                 break
-        return
-
-    def prtFamily(self):
-        print(' ----------- 打印项目集族 --------------')
-        for itemSet in self.itemSets:
-            print(itemSet.name)
-            for item in itemSet.items:
-                rightList = [r['type'] for r in item.rhs]
-                # print(item.lhs, rightList, item.dot_position, item.terms)
-        print('\n')
-        for edge in self.edges:
-            print(edge['start'], edge['symbol'], edge['end'])
         return

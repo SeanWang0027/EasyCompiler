@@ -818,38 +818,3 @@ class SemanticAnalyser:
         middleCodeObj.write(text)
         middleCodeObj.close()
         return True
-
-    def prtSemanticStack(self):
-        print("------- 打印语义分析栈 -----------")
-        for s in self.sStack:
-            print(s.name)
-        return
-
-    def prtFuncTable(self):
-        print("------- 打印函数表 -----------")
-        for f in self.funcTable:
-            paraList = []
-            for para in f.params:
-                paraList.append(para[0])
-            print('函数名:', f.name, '形参列表:', paraList)
-        return
-
-    def prtSymbolTable(self):
-        print("------- 打印符号表 -----------")
-        for s in self.symbolTable:
-            print(s.name, s.type, s.place, s.function)
-        return
-
-    def prtNodeCode(self, node):
-        print('------ 打印语法树节点的中间代码 -----------' + node.name)
-        for code in node.code:
-            print(code)
-        return
-
-    def prtNodeStack(self, node):
-        print('------ 打印语法树节点栈 -----------' + node.name)
-        nameList = []
-        for node in node.stack:
-            nameList.append(node.name)
-        print(nameList)
-        return
