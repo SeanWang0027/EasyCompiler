@@ -34,7 +34,7 @@ def compiler(input_file):
     cfg.getDot()
     cfg.CalculateFirst()
     family  = ItemFamily(cfg)
-    family.buildFamily()
+    family.build()
     ana = SyntacticAnalyzer(lex,cfg,family)
     ana.getTables()
     with open(input_file,'r') as f :
