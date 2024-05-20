@@ -7,31 +7,30 @@ class synAnalyzer:
     # ACTION[s, a]：当状态s面临输入符号a时，应采取什么动作.
     # GOTO[s, X]：状态s面对文法符号X时，下一状态是什么
     def __init__(self, lex, cfg, family):
-        self.lexicalResult = lex  # 词法分析结果
-        self.cfg = cfg  # 文件读入类实例化 产生式
-        self.family = family  # 项目集族 LR0项目集
+        self.lexicalResult = lex
+        self.cfg = cfg  
+        self.family = family  
         self.End = cfg.End
         self.OriginStart = cfg.OriginStart
         self.Start = cfg.Start
         self.Terminals = cfg.Terminals
         self.NonTerminals = cfg.NonTerminals
-        self.sets = family.sets  # 状态集合
+        self.sets = family.sets 
         self.edges = family.edges
         self.numSet = len(self.sets)
-        ACTIONTable = self.Terminals  # ACTION表面临的输入符号
+        ACTIONTable = self.Terminals  
         ACTIONTable.append(self.End)
-        self.ACTION = {y.name: {x: ' ' for x in ACTIONTable} for y in self.sets}  # ACTION表
-        self.GOTO = {y.name: {x: ' ' for x in self.NonTerminals} for y in self.sets}  # GOTO表
-        self.procedures = cfg.procedures  # 产生式
+        self.ACTION = {y.name: {x: ' ' for x in ACTIONTable} for y in self.sets} 
+        self.GOTO = {y.name: {x: ' ' for x in self.NonTerminals} for y in self.sets}  
+        self.procedures = cfg.procedures
         self.procedurestrs = [i.toStr() for i in self.procedures]
         self.MTitle = self.Terminals + self.NonTerminals
-        self.M = {y.name: {x: ' ' for x in self.MTitle} for y in self.sets}  # 总表
+        self.M = {y.name: {x: ' ' for x in self.MTitle} for y in self.sets}
         self.syntacticRst = True
         self.syntacticErrMsg = "Synthetical Analysis Success!"
-        self.semantic = SemAnalyzer()  # 语法分析的同时进行语义分析
+        self.semantic = SemAnalyzer() 
         return
 
-    # 给出一个产生式，返回这个产生式是原文法的第几个产生式
     def index(self, item):
         tmp = item.lhs + '->@'  
         for right in item.rhs:
@@ -39,7 +38,6 @@ class synAnalyzer:
         tmp += '# '
         return self.procedurestrs.index(tmp)
 
-    # 输入字符串分析 S05 P92
     def ParseRest(self):
         return self.parseRes
 
@@ -54,7 +52,6 @@ class synAnalyzer:
             print('LR(1) Table has multipy entrances!')
         self.M[I.name][item.terms[0]] = 'reduce ' + str(self.index(item))
     
-    # 得到ACTION表和GOTO表
     def ActionAndGoto(self):
         self.rst = list()
         for e in self.edges:

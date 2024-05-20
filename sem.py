@@ -629,8 +629,8 @@ class SemAnalyzer:
         while len(n.tmpstack) > 0:
             t = n.tmpstack.pop(0)
             nRight = n.tmpstack.pop(0)
-            arg1 = nLeft.statistics if nLeft.midval is None else nLeft.midval
-            arg2 = nRight.statistics if nRight.midval is None else nRight.midval
+            param1 = nLeft.statistics if nLeft.midval is None else nLeft.midval
+            param2 = nRight.statistics if nRight.midval is None else nRight.midval
             if len(nLeft.midcode) > 0:
                 for code in nLeft.midcode:
                     n.midcode.append(code)
@@ -641,7 +641,7 @@ class SemAnalyzer:
             newTreeNode.name = None 
             newTreeNode.midval = self.getNewTmp()
             newTreeNode.type = nRight.type
-            code = (t.type, arg1, arg2, newTreeNode.midval)
+            code = (t.type, param1, param2, newTreeNode.midval)
             n.midcode.append(code)
             nLeft = newTreeNode
             n.type = nRight.type

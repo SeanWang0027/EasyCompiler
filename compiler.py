@@ -50,8 +50,8 @@ def compiler(input_file):
     MidCode = 'MidCode.txt'
     ana.semantic.savecodeFile(os.path.join(directoryname,MidCode))
     print('compile success!')
-    ocg = ObjectCodeGenerator(ana.semantic.mid_Code,ana.semantic.symbolTable,ana.semantic.funcTable)
-    ocg.genMips()
+    ocg = ObjectCode(ana.semantic.mid_Code,ana.semantic.symbolTable,ana.semantic.funcTable)
+    ocg.generateObjectCode()
     tokens = lex.origin_tokens(originCode)
     lex_csv = 'lex.csv'
     header = tokens[0].keys()
