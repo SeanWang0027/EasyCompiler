@@ -11,6 +11,7 @@ import os
 import csv
 import re
 import shutil
+import sys
 
 def usage():
     print("usage: " + sys.argv[0] + " -i input-file")
@@ -35,8 +36,8 @@ def compiler(input_file):
     cfg.CalculateFirst()
     family  = ItemFamily(cfg)
     family.build()
-    ana = SyntacticAnalyzer(lex,cfg,family)
-    ana.getTables()
+    ana = synAnalyzer(lex,cfg,family)
+    ana.ActionAndGoto()
     with open(input_file,'r') as f :
         originCode = f.read()
     ana.isRecognizable(originCode)
@@ -47,7 +48,7 @@ def compiler(input_file):
         print('compile failure',ana.semantic.semlog)
         return
     MidCode = 'MidCode.txt'
-    ana.semantic.saveMidCodeToFile(os.path.join(directoryname,MidCode))
+    ana.semantic.savecodeFile(os.path.join(directoryname,MidCode))
     print('compile success!')
     ocg = ObjectCodeGenerator(ana.semantic.mid_Code,ana.semantic.symbolTable,ana.semantic.funcTable)
     ocg.genMips()
@@ -60,7 +61,7 @@ def compiler(input_file):
         for token in tokens:
             writer.writerow(token)
     print('Lex Result has been written into file!')
-    parseRes = ana.getParseRst()
+    parseRes = ana.ParseRest()
     parse_csv = 'parse.csv'
     header = parseRes[0].keys()
     with open(os.path.join(directoryname,parse_csv),mode='w',newline='') as f: 

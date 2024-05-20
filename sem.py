@@ -6,19 +6,18 @@ from func import Func
 # 语义分析类
 class SemAnalyzer:
     def __init__(self):
-        self.sStack = list()  # 语义分析栈
-        self.symbolTable = list()  # 符号表    [s { name, function } ]
-        self.funcTable = list()  # 函数表
-        self.midValid = 0  # 中间变量名序号
-        self.curLabelId = 0  # 当前 label 入口序号
-        self.curFuncId = 0  # 当前 function 序号
-        self.curOffset = 0  # 当前偏移量
-        # 把全局当作一个函数
+        self.sStack = list() 
+        self.symbolTable = list()
+        self.funcTable = list()
+        self.midValid = 0  
+        self.curLabelId = 0 
+        self.curFuncId = 0 
+        self.curOffset = 0 
         f = Func()
         f.name = 'global'  # 函数标识符
         f.label = 'global'  # 函数入口处标签
-        self.updateFuncTable(f)  # 把全局函数加入函数表
-        self.curFunction = f  # 当前函数为global
+        self.updateFuncTable(f) 
+        self.curFunction = f 
         self.mid_Code = list()  # 生成的中间代码
         self.marksem = True
         self.semlog = "Semantic Analyze Success!"
@@ -41,7 +40,7 @@ class SemAnalyzer:
     
     def handleArray(self,shiftStr):
         new_exp = self.popStack() 
-        self.calExpression(new_exp)  
+        self.calExp(new_exp)  
         array_n = copy.deepcopy(self.sStack[-1])  
         if shiftStr[-4]['type'] == 'array':  
             self.popStack()
@@ -263,7 +262,7 @@ class SemAnalyzer:
             id = shiftStr[-4]['data']
             node = copy.deepcopy(self.popStack())  # expression
             node.name = nt
-            self.calExpression(node)
+            self.calExp(node)
             sam = self.findSymbol(id, self.curFunction.label)
             if sam is None:
                 print("Use Val that is not defined!")
@@ -287,7 +286,7 @@ class SemAnalyzer:
             node.name = nt
             array_n = self.popStack()
             array_name = array_n.arrayname 
-            self.calExpression(node) 
+            self.calExp(node) 
             sam = self.findSymbol(array_name, self.curFunction.label)
             if sam is None:
                 print("Use Array Val that is not defined!")
@@ -314,7 +313,7 @@ class SemAnalyzer:
         node = None
         if len(r) == 3:  # return expression
             node = self.popStack()  # expression    
-            self.calExpression(node)
+            self.calExp(node)
             node.type = r[0]['type']  # == return
 
             n_Rst = None
@@ -404,7 +403,7 @@ class SemAnalyzer:
             newTreeNode.midval = nTmp.midval
         elif len(r) == 3 and r[1]['type'] == 'expression':
             newTreeNode = self.popStack()
-            self.calExpression(newTreeNode)
+            self.calExp(newTreeNode)
         else:  # -> array
             newTreeNode = self.popStack()
             nTmp = self.findSymbol(newTreeNode.arrayname, self.curFunction.label)
@@ -442,13 +441,13 @@ class SemAnalyzer:
         if len(r) == 3:  # formalParaList -> expression , formalParaList
             node = self.popStack()
             nExp = self.popStack()
-            self.calExpression(nExp)
+            self.calExp(nExp)
             node.tmpstack.insert(0, nExp)
         elif len(r) == 1 and (r[0]['type'] in ['$']):  # $
             node = TreeNode()
         elif len(r) == 1 and r[0]['type'] == 'expression':  # expression
             node = copy.deepcopy(self.popStack())
-            self.calExpression(node)
+            self.calExp(node)
         node.name = nt
         self.sStack.append(node)
     
@@ -461,7 +460,7 @@ class SemAnalyzer:
             newTreeNode.end = self.getNewLabel()
             nT = self.popStack()  # True
             nExp = self.popStack()
-            self.calExpression(nExp)
+            self.calExp(nExp)
             newTreeNode.midcode.extend(nExp.midcode)
             newTreeNode.midcode.append(('j>', nExp.midval, '0', newTreeNode.true))
             newTreeNode.midcode.append(('j', '_', '_', newTreeNode.end))
@@ -477,7 +476,7 @@ class SemAnalyzer:
             nF = self.popStack()  # False
             nT = self.popStack()  # True
             nExp = self.popStack()
-            self.calExpression(nExp)
+            self.calExp(nExp)
             sent = ('j', '_', '_', newTreeNode.false)
             newTreeNode.midcode.extend(nExp.midcode)
             newTreeNode.midcode.append(('j>', nExp.midval, '0', newTreeNode.true))
@@ -504,7 +503,7 @@ class SemAnalyzer:
         if r[0]['type'] == 'while':
             statement = self.popStack()  # block
             expression = self.popStack()  # expression
-            self.calExpression(expression)
+            self.calExp(expression)
             newTreeNode.midcode.append((newTreeNode.beg, ':', '_', '_'))
             for code in expression.midcode:
                 newTreeNode.midcode.append(code)
@@ -522,8 +521,6 @@ class SemAnalyzer:
             newTreeNode.midcode.append((newTreeNode.false, ':', '_', '_'))
         self.sStack.append(newTreeNode)
     
-    # 根据语义规则进行规约
-    # prod: 规约时运用的产生式, shiftStr: 移进规约串
     def semanticAnalyze(self, prod, shiftStr):
         nt = prod.lhs
         r = prod.rhs
@@ -589,7 +586,6 @@ class SemAnalyzer:
             self.handleLoop(r,nt)
         return
 
-    # 在符号表里查找符号
     def findSymbol(self, name, function):
         for func in self.symbolTable:
             condition = (func.name == name and func.function == function)
@@ -597,7 +593,6 @@ class SemAnalyzer:
                 return func
         return None
 
-    # 更新符号表
     def updateSymbolTable(self, symbol):
         for s in self.symbolTable:
             if s.name == symbol.name and s.function == symbol.function:
@@ -606,7 +601,6 @@ class SemAnalyzer:
         self.symbolTable.append(symbol)
         return
 
-    # 更新函数表
     def updateFuncTable(self, func):
         for f in self.funcTable:
             condition = f.name == func.name
@@ -616,20 +610,16 @@ class SemAnalyzer:
         self.funcTable.append(func)
         return
 
-    # 获得新的结点
     def getNewTmp(self):
         time = "t" + str(self.midValid + 1)
         self.midValid += 1 
         return time 
 
-    # 获得新的标签
     def getNewLabel(self):
         self.curLabelId += 1
         return 'l' + str(self.curLabelId)
 
-    # 生成代码emit
-    # 对于 expression 节点 n, 生成对应代码, 放在属性 code 里
-    def calExpression(self, n):
+    def calExp(self, n):
         if len(n.tmpstack) == 1:
             n = copy.deepcopy(n.tmpstack[0])
             n.tmpstack = list()
@@ -659,7 +649,7 @@ class SemAnalyzer:
         return True
 
     # 将中间代码保存到文件中
-    def saveMidCodeToFile(self,midcode):
+    def savecodeFile(self,midcode):
         text = ''
         for code in self.mid_Code:
             text += '{}, {}, {}, {}\n'.format(code[0], code[1], code[2], code[3])

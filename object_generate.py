@@ -1,5 +1,4 @@
 import copy
-import sys
 
 
 # 目标代码生成器
@@ -58,10 +57,6 @@ class ObjectCodeGenerator:
                             varUsageCnts[tmp] += 1
                         else:
                             varUsageCnts[tmp] = 1
-
-        # print('===\n', 'varUsageCnts:', varUsageCnts, '\n===\n')
-
-        sys.stdout.flush()
         flag = False
 
         # 找出之后不会使用的变量所在的寄存器
@@ -353,11 +348,4 @@ class ObjectCodeGenerator:
         mc.append('programEnd:')
         mc.append('    nop')
 
-        # self.prtMips()
-        sys.stdout.flush()
-        return
-
-    def prtMips(self):
-        for code in self.mipsCode:
-            print(code)
         return
